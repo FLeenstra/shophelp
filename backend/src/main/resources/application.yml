@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: shophelp
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/shophelp}
+    username: ${SPRING_DATASOURCE_USERNAME:shophelp}
+    password: ${SPRING_DATASOURCE_PASSWORD:shophelp}
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    properties:
+      hibernate.format_sql: true
+  flyway:
+    enabled: true
+
+server:
+  port: 8080
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
