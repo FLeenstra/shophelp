@@ -15,17 +15,25 @@ services:
       timeout: 5s
       retries: 10
 
+  price-service:
+    build: ./price-service
+    ports:
+      - "8000:8000"
+
   backend:
     build: ./backend
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/shophelp
       SPRING_DATASOURCE_USERNAME: shophelp
       SPRING_DATASOURCE_PASSWORD: shophelp
+      PRICE_SERVICE_URL: http://price-service:8000
     ports:
       - "8080:8080"
     depends_on:
       db:
         condition: service_healthy
+      price-service:
+        condition: service_started
 
   frontend:
     build: ./frontend

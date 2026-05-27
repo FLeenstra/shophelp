@@ -17,6 +17,10 @@ spring:
 server:
   port: 8080
 
+# Python price-service (FastAPI + SupermarktConnector) for live prices.
+price-service:
+  url: ${PRICE_SERVICE_URL:http://price-service:8000}
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html

@@ -7,8 +7,9 @@ A web app for the price-conscious shopper. Compare product prices across stores 
 - **Frontend:** Angular 18 + Leaflet (OpenStreetMap tiles, no API key)
 - **Backend:** Java 21 + Spring Boot 3, Spring Data JPA / Hibernate
 - **Database:** PostgreSQL 16, schema managed by Flyway migrations
+- **price-service:** Python FastAPI wrapping [SupermarktConnector](https://github.com/bartmachielsen/SupermarktConnector) for live supermarket prices
 - **API:** OpenAPI 3 — generated from the Spring controllers by springdoc, with Swagger UI for trying endpoints
-- **Everything runs in Docker** — no local JDK, Node, or Maven needed
+- **Everything runs in Docker** — no local JDK, Node, Python, or Maven needed
 
 ## Quick start
 
@@ -26,6 +27,7 @@ Then open:
 | Backend API | http://localhost:8080/api             |
 | Swagger UI  | http://localhost:8080/swagger-ui.html |
 | OpenAPI doc | http://localhost:8080/v3/api-docs     |
+| price-service | http://localhost:8000/docs (FastAPI docs) |
 | PostgreSQL  | localhost:5432 (db/user/pass: `shophelp`) |
 
 The frontend (nginx) proxies `/api` to the backend, so the app is served from a single origin. Stop with `docker compose down` (add `-v` to also drop the database volume).
@@ -43,10 +45,13 @@ shophelp/
 │       ├── java/.../service     # ComparisonService, RouteService
 │       ├── java/.../web         # REST controllers
 │       └── resources/db/migration  # Flyway V1 schema + V2 seed data
-└── frontend/               # Angular app
-    ├── Dockerfile          # multi-stage Node build → nginx image
-    ├── nginx.conf          # serves the SPA, proxies /api to the backend
-    └── src/app             # ApiService + main component with the Leaflet map
+├── frontend/               # Angular app
+│   ├── Dockerfile          # multi-stage Node build → nginx image
+│   ├── nginx.conf          # serves the SPA, proxies /api to the backend
+│   └── src/app             # ApiService + main component with the Leaflet map
+└── price-service/          # Python FastAPI + SupermarktConnector
+    ├── Dockerfile
+    └── main.py             # /search endpoint, normalises AH/Jumbo results
 ```
 
 ## API endpoints
@@ -58,6 +63,7 @@ shophelp/
 | GET    | `/api/stores`            | List stores (with coordinates)                                 |
 | POST   | `/api/basket/compare`    | Per-store total for a basket; cheapest complete basket first   |
 | POST   | `/api/route/plan`        | Ordered map route buying each item at its cheapest store       |
+| GET    | `/api/live/search`       | Live prices from real supermarkets (`?query=&chain=all\|ah\|jumbo`) |
 
 Example:
 
@@ -74,6 +80,23 @@ curl -X POST http://localhost:8080/api/basket/compare \
 
 Seed data ships with sample supermarkets in and around **Bolsward, Friesland** (Albert Heijn, Jumbo, Lidl, Poiesz, and Aldi in Sneek) plus ~10 common products with varying prices.
 
+## Live prices (experimental)
+
+`GET /api/live/search` fetches real prices: the Spring backend calls the Python
+`price-service`, which uses SupermarktConnector to query the supermarkets'
+(unofficial) mobile APIs. Chains run in parallel, each bounded by a 6s timeout,
+so a slow or broken chain fails into an `errors[]` array instead of hanging.
+
+```bash
+curl "http://localhost:8080/api/live/search?query=koffie&chain=ah"
+```
+
+> **Caveat:** these are *unofficial* APIs with no stability guarantees.
+> **Albert Heijn works; Jumbo currently does not** — SupermarktConnector (last
+> released 2022) targets `mobileapi.jumbo.com/v15`, which now returns `404`
+> because Jumbo changed their API. This is expected fragility for reverse-engineered
+> endpoints; the seeded data remains the reliable source. See the roadmap.
+
 ## Roadmap
 
 ### Phase 1 — Foundations ✅
@@ -86,6 +109,9 @@ Seed data ships with sample supermarkets in and around **Bolsward, Friesland** (
 - [x] Basket builder (add/remove items, quantities) in the UI
 - [x] Per-store basket totals with the cheapest option highlighted
 - [x] Angular price-comparison view
+- [x] Live price lookup via the Python price-service (Albert Heijn)
+- [ ] Fix/replace the Jumbo connector (upstream lib's endpoint is outdated)
+- [ ] Ingest live prices into `store_price` so comparison/route use real data
 - [ ] Persisted shopping lists and product/price CRUD
 
 ### Phase 3 — Shopping route on a map ✅
