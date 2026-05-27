@@ -5,15 +5,28 @@ Exposes a normalised /search endpoint that the Java backend calls over the
 Docker network. Talks to the (unofficial) Albert Heijn and Jumbo mobile APIs,
 so live results depend on those endpoints being reachable from this container.
 """
+import json
 import logging
+import os
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fastapi import FastAPI, Query
 from pydantic import BaseModel
 
-logging.basicConfig(level=logging.INFO)
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(level=LOG_LEVEL, format="%(asctime)s %(levelname)s %(name)s | %(message)s")
 logger = logging.getLogger("price-service")
+
+# Log the real HTTP exchange with the supermarket APIs: urllib3 emits the
+# request line and response status (e.g. the Jumbo v15 404) at DEBUG level.
+logging.getLogger("urllib3").setLevel(logging.DEBUG)
+
+
+def _truncate(obj: Any, limit: int = 1500) -> str:
+    """Compact JSON for logging, truncated so replies don't flood the logs."""
+    text = json.dumps(obj, ensure_ascii=False, default=str)
+    return text if len(text) <= limit else f"{text[:limit]}... [{len(text)} chars total]"
 
 # Per-chain deadline. The unofficial APIs can hang (e.g. Jumbo's endpoint),
 # so we abandon a slow chain rather than let it block the whole request.
@@ -45,10 +58,13 @@ def health():
 def _search_ah(query: str, size: int) -> List[PriceResult]:
     from supermarktconnector.ah import AHConnector
 
+    logger.info("AH request  -> search_products(query=%r, size=%d)", query, size)
     connector = AHConnector()
     data = connector.search_products(query=query, size=size, page=0)
+    products = data.get("products", [])
+    logger.info("AH reply    <- %d product(s); raw=%s", len(products), _truncate(data))
     results = []
-    for p in data.get("products", []):
+    for p in products:
         results.append(PriceResult(
             chain="Albert Heijn",
             name=p.get("title"),
@@ -61,9 +77,11 @@ def _search_ah(query: str, size: int) -> List[PriceResult]:
 def _search_jumbo(query: str, size: int) -> List[PriceResult]:
     from supermarktconnector.jumbo import JumboConnector
 
+    logger.info("Jumbo request  -> search_products(query=%r, size=%d)", query, size)
     connector = JumboConnector()
     data = connector.search_products(query=query, size=size, page=0)
     products = data.get("products", {}).get("data", [])
+    logger.info("Jumbo reply    <- %d product(s); raw=%s", len(products), _truncate(data))
     results = []
     for p in products:
         amount = None
