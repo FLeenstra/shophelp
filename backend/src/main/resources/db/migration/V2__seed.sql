@@ -18,20 +18,14 @@ insert into product (name, category, unit) values
     ('Tomatoes',       'Produce',   'kg'),
     ('Cheese',         'Dairy',     'kg');
 
--- Generate a price for every (store, product): per-store factor x per-product base,
--- plus a small deterministic jitter so different stores win different items.
+-- Generate a price for every (store, product). Each store gets a deterministic
+-- per-product multiplier (0.85x..1.05x of the base price), so different stores
+-- are cheapest for different items -- which makes the route span multiple stores.
 insert into store_price (store_id, product_id, price)
 select s.id,
        p.id,
-       round((bp.base * sf.factor + (((s.id * 7 + p.id * 13) % 7) - 3) * 0.05)::numeric, 2)
+       round((bp.base * (0.85 + ((s.id * 13 + p.id * 7) % 11) / 50.0))::numeric, 2)
 from store s
-         join (values
-                   ('Albert Heijn Bolsward', 1.08),
-                   ('Jumbo Bolsward', 1.00),
-                   ('Lidl Bolsward', 0.92),
-                   ('Poiesz Bolsward', 0.97),
-                   ('Aldi Sneek', 0.90)
-    ) as sf(name, factor) on sf.name = s.name
          join product p on true
          join (values
                    ('Milk', 1.20),
