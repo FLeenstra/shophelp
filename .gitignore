@@ -11,6 +11,9 @@ price-service/__pycache__/
 price-service/.venv/
 *.pyc
 
+# Secrets / local env (keep .env.example tracked)
+.env
+
 # IDE / OS
 .idea/
 *.iml

@@ -32,7 +32,7 @@
   </section>
 
   <section class="panel">
-    <h2>2. Price comparison</h2>
+    <h2>2. Price comparison <span class="badge stub" *ngIf="pricesStubbed" title="Based on sample/seed data, not live prices">stubbed</span></h2>
     <p class="hint" *ngIf="!storeTotals">Add items and hit “Compare prices”.</p>
     <table *ngIf="storeTotals && storeTotals.length">
       <thead>
@@ -49,18 +49,29 @@
   </section>
 
   <section class="panel wide">
-    <h2>3. Shopping route</h2>
+    <h2>3. Shopping route <span class="badge stub" *ngIf="pricesStubbed" title="Based on sample/seed data, not live prices">stubbed</span></h2>
+
     <div *ngIf="routePlan" class="route-summary">
       <span>Estimated basket: <strong>€{{ routePlan.estimatedTotal | number: '1.2-2' }}</strong></span>
       <span>Distance: <strong>{{ routePlan.totalDistanceKm }} km</strong></span>
       <span>Stops: <strong>{{ routePlan.stops.length }}</strong></span>
     </div>
+
+    <div *ngIf="routePlan && routePlan.stops.length" class="route-actions">
+      <a class="btn-link" [href]="googleMapsUrl" target="_blank" rel="noopener">🗺 Open route in Google Maps</a>
+    </div>
+
     <ol class="stops" *ngIf="routePlan">
       <li *ngFor="let stop of routePlan.stops">
         <strong>{{ stop.storeName }}</strong> — €{{ stop.subtotal | number: '1.2-2' }}
         <div class="stop-items">{{ stop.items.join(', ') }}</div>
       </li>
     </ol>
-    <div id="map"></div>
+
+    <div id="map" *ngIf="mapsAvailable"></div>
+    <div class="map-placeholder" *ngIf="!mapsAvailable">
+      <p>🗺 Embedded Google map is disabled.</p>
+      <p>Set <code>GOOGLE_MAPS_API_KEY</code> for the frontend container to enable it. The “Open route in Google Maps” button above works without a key.</p>
+    </div>
   </section>
 </main>

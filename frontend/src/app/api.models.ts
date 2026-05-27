@@ -37,3 +37,7 @@ export interface RoutePlan {
   estimatedTotal: number;
   totalDistanceKm: number;
 }
+
+export interface Meta {
+  pricesStubbed: boolean;
+}

@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { BasketItem, Product, RoutePlan, StoreTotal } from './api.models';
+import { BasketItem, Meta, Product, RoutePlan, StoreTotal } from './api.models';
 
 // Relative path: in production nginx proxies /api to the backend (same origin).
 const API = '/api';
@@ -12,6 +12,10 @@ export class ApiService {
 
   getProducts(): Observable<Product[]> {
     return this.http.get<Product[]>(`${API}/products`);
+  }
+
+  getMeta(): Observable<Meta> {
+    return this.http.get<Meta>(`${API}/meta`);
   }
 
   compareBasket(items: BasketItem[]): Observable<StoreTotal[]> {

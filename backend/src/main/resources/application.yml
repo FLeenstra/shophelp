@@ -21,6 +21,11 @@ server:
 price-service:
   url: ${PRICE_SERVICE_URL:http://price-service:8000}
 
+shophelp:
+  # The basket comparison and route currently run on seeded sample prices.
+  # Flip to false once real prices are ingested into store_price.
+  prices-stubbed: ${SHOPHELP_PRICES_STUBBED:true}
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html

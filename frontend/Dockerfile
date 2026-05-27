@@ -10,4 +10,7 @@ RUN npm run build
 FROM nginx:alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist/frontend/browser /usr/share/nginx/html
+# Runtime config injection (Google Maps key from env) on container startup.
+COPY docker-entrypoint.d/40-shophelp-config.sh /docker-entrypoint.d/40-shophelp-config.sh
+RUN chmod +x /docker-entrypoint.d/40-shophelp-config.sh
 EXPOSE 80

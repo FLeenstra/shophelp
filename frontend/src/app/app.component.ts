@@ -1,10 +1,13 @@
 import { AfterViewInit, Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import * as L from 'leaflet';
 
 import { ApiService } from './api.service';
+import { ConfigService } from './config.service';
+import { loadGoogleMaps } from './maps-loader';
 import { BasketItem, Product, RoutePlan, StoreTotal } from './api.models';
+
+declare const google: any;
 
 @Component({
   selector: 'app-root',
@@ -20,30 +23,37 @@ export class AppComponent implements OnInit, AfterViewInit {
   storeTotals: StoreTotal[] | null = null;
   routePlan: RoutePlan | null = null;
   error: string | null = null;
+  pricesStubbed = false;
 
   // Default start location: central Bolsward, Friesland.
   startLat = 53.0667;
   startLng = 5.5314;
 
-  private map?: L.Map;
-  private routeLayer?: L.LayerGroup;
+  mapsAvailable = false;
+  private map: any;
+  private directionsRenderer: any;
+  private fallbackLayers: any[] = [];
 
-  constructor(private api: ApiService) {}
+  constructor(private api: ApiService, private config: ConfigService) {
+    this.mapsAvailable = !!this.config.googleMapsApiKey;
+  }
 
   ngOnInit(): void {
     this.api.getProducts().subscribe({
       next: (products) => (this.products = products),
       error: () => (this.error = 'Could not load products. Is the backend running?')
     });
+    this.api.getMeta().subscribe({
+      next: (meta) => (this.pricesStubbed = meta.pricesStubbed),
+      error: () => {}
+    });
   }
 
   ngAfterViewInit(): void {
-    this.map = L.map('map').setView([this.startLat, this.startLng], 12);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '© OpenStreetMap contributors'
-    }).addTo(this.map);
-    this.routeLayer = L.layerGroup().addTo(this.map);
+    // Warm up the Maps script so the map is ready by the time a route is planned.
+    if (this.mapsAvailable) {
+      loadGoogleMaps(this.config.googleMapsApiKey).catch(() => (this.mapsAvailable = false));
+    }
   }
 
   qty(productId: number): number {
@@ -73,36 +83,113 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.api.planRoute(this.basket, this.startLat, this.startLng).subscribe({
       next: (plan) => {
         this.routePlan = plan;
-        this.renderRoute(plan);
+        this.renderMap(plan);
       },
       error: () => (this.error = 'Route planning failed.')
     });
   }
 
-  private renderRoute(plan: RoutePlan): void {
-    if (!this.map || !this.routeLayer) {
+  /** Deep link that opens Google Maps with driving directions through every stop (no API key needed). */
+  get googleMapsUrl(): string {
+    if (!this.routePlan || this.routePlan.stops.length === 0) {
+      return '';
+    }
+    const stops = this.routePlan.stops;
+    const origin = `${this.startLat},${this.startLng}`;
+    const last = stops[stops.length - 1];
+    const destination = `${last.latitude},${last.longitude}`;
+    const waypoints = stops
+      .slice(0, -1)
+      .map((s) => `${s.latitude},${s.longitude}`)
+      .join('|');
+    let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=driving`;
+    if (waypoints) {
+      url += `&waypoints=${encodeURIComponent(waypoints)}`;
+    }
+    return url;
+  }
+
+  private async renderMap(plan: RoutePlan): Promise<void> {
+    if (!this.mapsAvailable || plan.stops.length === 0) {
       return;
     }
-    this.routeLayer.clearLayers();
-
-    const startIcon = L.divIcon({ className: 'pin pin-start', html: '★', iconSize: [30, 30] });
-    L.marker([this.startLat, this.startLng], { icon: startIcon })
-      .bindTooltip('Start')
-      .addTo(this.routeLayer);
-
-    const points: L.LatLngTuple[] = [[this.startLat, this.startLng]];
-    for (const stop of plan.stops) {
-      points.push([stop.latitude, stop.longitude]);
-      const icon = L.divIcon({ className: 'pin', html: String(stop.order), iconSize: [30, 30] });
-      L.marker([stop.latitude, stop.longitude], { icon })
-        .bindTooltip(`${stop.order}. ${stop.storeName}`)
-        .addTo(this.routeLayer);
+    try {
+      await loadGoogleMaps(this.config.googleMapsApiKey);
+    } catch {
+      this.mapsAvailable = false;
+      return;
+    }
+    const el = document.getElementById('map');
+    if (!el) {
+      return;
+    }
+    if (!this.map) {
+      this.map = new google.maps.Map(el, {
+        center: { lat: this.startLat, lng: this.startLng },
+        zoom: 12,
+        mapTypeControl: false,
+        streetViewControl: false
+      });
     }
 
-    L.polyline(points, { color: '#2563eb', weight: 4, opacity: 0.7 }).addTo(this.routeLayer);
+    const stops = plan.stops;
+    const last = stops[stops.length - 1];
+    const request = {
+      origin: { lat: this.startLat, lng: this.startLng },
+      destination: { lat: last.latitude, lng: last.longitude },
+      waypoints: stops.slice(0, -1).map((s) => ({
+        location: { lat: s.latitude, lng: s.longitude },
+        stopover: true
+      })),
+      travelMode: google.maps.TravelMode.DRIVING
+    };
 
-    if (points.length > 1) {
-      this.map.fitBounds(L.latLngBounds(points).pad(0.2));
+    if (!this.directionsRenderer) {
+      this.directionsRenderer = new google.maps.DirectionsRenderer({ map: this.map });
     }
+
+    const service = new google.maps.DirectionsService();
+    service.route(request, (result: any, status: any) => {
+      if (status === 'OK') {
+        this.clearFallback();
+        this.directionsRenderer.setDirections(result);
+      } else {
+        // No road route available — fall back to markers + straight lines.
+        this.directionsRenderer.set('directions', null);
+        this.drawFallback(plan);
+      }
+    });
+  }
+
+  private drawFallback(plan: RoutePlan): void {
+    this.clearFallback();
+    const path = [
+      { lat: this.startLat, lng: this.startLng },
+      ...plan.stops.map((s) => ({ lat: s.latitude, lng: s.longitude }))
+    ];
+    const bounds = new google.maps.LatLngBounds();
+    path.forEach((point, i) => {
+      const marker = new google.maps.Marker({
+        position: point,
+        map: this.map,
+        label: i === 0 ? 'S' : String(i)
+      });
+      this.fallbackLayers.push(marker);
+      bounds.extend(point);
+    });
+    const line = new google.maps.Polyline({
+      path,
+      map: this.map,
+      strokeColor: '#2563eb',
+      strokeWeight: 4,
+      strokeOpacity: 0.7
+    });
+    this.fallbackLayers.push(line);
+    this.map.fitBounds(bounds);
+  }
+
+  private clearFallback(): void {
+    this.fallbackLayers.forEach((layer) => layer.setMap(null));
+    this.fallbackLayers = [];
   }
 }

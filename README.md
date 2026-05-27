@@ -4,7 +4,7 @@ A web app for the price-conscious shopper. Compare product prices across stores 
 
 ## Tech stack
 
-- **Frontend:** Angular 18 + Leaflet (OpenStreetMap tiles, no API key)
+- **Frontend:** Angular 18 + Google Maps (embedded map with Directions; "Open in Google Maps" deep link needs no key)
 - **Backend:** Java 21 + Spring Boot 3, Spring Data JPA / Hibernate
 - **Database:** PostgreSQL 16, schema managed by Flyway migrations
 - **price-service:** Python FastAPI wrapping [SupermarktConnector](https://github.com/bartmachielsen/SupermarktConnector) for live supermarket prices
@@ -32,6 +32,8 @@ Then open:
 
 The frontend (nginx) proxies `/api` to the backend, so the app is served from a single origin. Stop with `docker compose down` (add `-v` to also drop the database volume).
 
+**Optional — embedded Google map:** copy `.env.example` to `.env` and set `GOOGLE_MAPS_API_KEY` (a [Maps JavaScript API](https://console.cloud.google.com/google/maps-apis) key). The key is injected into the frontend container at startup (no rebuild needed). Without a key the app still works — the route list and the "Open in Google Maps" button work without one; only the embedded map shows a placeholder.
+
 ## Project structure
 
 ```
@@ -48,7 +50,8 @@ shophelp/
 ├── frontend/               # Angular app
 │   ├── Dockerfile          # multi-stage Node build → nginx image
 │   ├── nginx.conf          # serves the SPA, proxies /api to the backend
-│   └── src/app             # ApiService + main component with the Leaflet map
+│   ├── docker-entrypoint.d # writes config.js (Google Maps key) at startup
+│   └── src/app             # ApiService + main component with the Google map
 └── price-service/          # Python FastAPI + SupermarktConnector
     ├── Dockerfile
     └── main.py             # /search endpoint, normalises AH/Jumbo results
@@ -64,6 +67,7 @@ shophelp/
 | POST   | `/api/basket/compare`    | Per-store total for a basket; cheapest complete basket first   |
 | POST   | `/api/route/plan`        | Ordered map route buying each item at its cheapest store       |
 | GET    | `/api/live/search`       | Live prices from real supermarkets (`?query=&chain=all\|ah\|jumbo`) |
+| GET    | `/api/meta`              | Frontend metadata, e.g. `{"pricesStubbed": true}`              |
 
 Example:
 
@@ -76,9 +80,11 @@ curl -X POST http://localhost:8080/api/basket/compare \
 ## How it works
 
 - **Price comparison** sums each store's price for the basket and ranks stores, putting those that carry the whole basket first.
-- **Route planning** picks the cheapest store for each item, then orders the resulting stores with a nearest-neighbour heuristic from your start location, returning waypoints the frontend draws on the map.
+- **Route planning** picks the cheapest store for each item, then orders the resulting stores with a nearest-neighbour heuristic from your start location. The frontend renders the waypoints with the **Google Maps Directions** service (real road routing; straight-line fallback if no route is found), and offers an **Open in Google Maps** button for turn-by-turn navigation through every stop.
 
 Seed data ships with sample supermarkets in and around **Bolsward, Friesland** (Albert Heijn, Jumbo, Lidl, Poiesz, and Aldi in Sneek) plus ~10 common products with varying prices.
+
+> **Stubbed data:** because comparison and routing currently run on these seeded sample prices (not live data), the UI shows a **"stubbed"** badge on those panels. The flag comes from `/api/meta` (`shophelp.prices-stubbed`), so it flips off automatically once real prices are ingested.
 
 ## Live prices (experimental)
 
@@ -110,6 +116,8 @@ curl "http://localhost:8080/api/live/search?query=koffie&chain=ah"
 - [x] Per-store basket totals with the cheapest option highlighted
 - [x] Angular price-comparison view
 - [x] Live price lookup via the Python price-service (Albert Heijn)
+- [x] Request/reply logging of the external supermarket calls
+- [x] "stubbed" badge so seeded data is clearly marked (via `/api/meta`)
 - [ ] Fix/replace the Jumbo connector (upstream lib's endpoint is outdated)
 - [ ] Ingest live prices into `store_price` so comparison/route use real data
 - [ ] Persisted shopping lists and product/price CRUD
@@ -117,8 +125,9 @@ curl "http://localhost:8080/api/live/search?query=koffie&chain=ah"
 ### Phase 3 — Shopping route on a map ✅
 - [x] Store locations with latitude/longitude
 - [x] Route planning: cheapest store per item, ordered into a visit route
-- [x] Leaflet map view with numbered store markers and the route drawn
-- [ ] Road-accurate routing (OSRM) with straight-line fallback
+- [x] Google Maps view with road-accurate Directions (straight-line fallback)
+- [x] "Open in Google Maps" deep link for turn-by-turn navigation (no key)
+- [x] Runtime Google Maps key injection with graceful no-key fallback
 
 ### Phase 4 — Polish
 - [ ] User accounts and saved lists

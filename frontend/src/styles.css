@@ -198,21 +198,53 @@ tr.best {
   border: 1px solid var(--border);
 }
 
-/* Numbered route markers (Leaflet divIcon) */
-.pin {
-  background: var(--accent);
-  color: #fff;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.badge.stub {
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.7rem;
   font-weight: 700;
-  border: 2px solid #fff;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 999px;
+  cursor: help;
 }
 
-.pin.pin-start {
+.route-actions {
+  margin: 0.25rem 0 0.75rem;
+}
+
+.btn-link {
+  display: inline-block;
   background: #16a34a;
+  color: #fff;
+  text-decoration: none;
+  padding: 0.55rem 1rem;
+  border-radius: 8px;
+  font-size: 0.95rem;
+}
+
+.btn-link:hover {
+  background: #15803d;
+}
+
+.map-placeholder {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 1.25rem;
+  color: var(--muted);
+  background: #f8fafc;
+  text-align: center;
+}
+
+.map-placeholder code {
+  background: #e2e8f0;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
 }
 
 @media (max-width: 720px) {
